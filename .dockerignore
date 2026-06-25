@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+temp/
+*.log
+.git/
+.gitignore
+README.md
+.eslintrc.json
+.prettierrc

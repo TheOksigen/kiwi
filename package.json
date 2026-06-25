@@ -1,0 +1,27 @@
+{
+  "name": "kiwi-bot",
+  "version": "1.0.0",
+  "description": "Kiwi 🥝 — YouTube audio downloader Telegram bot",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts'"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "grammy": "^1.21.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.5",
+    "@typescript-eslint/eslint-plugin": "^7.6.0",
+    "@typescript-eslint/parser": "^7.6.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

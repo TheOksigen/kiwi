@@ -1,0 +1,15 @@
+services:
+  kiwi-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - kiwi-temp:/app/temp
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  kiwi-temp:
