@@ -10,6 +10,11 @@ import logger from '../utils/logger';
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type ProgressFn = (percent: number) => void;
+
+// tv_embedded/web_embedded clientləri age-check enforce etmir
+const YTDLP_BASE_ARGS = [
+  '--extractor-args', 'youtube:player_client=tv_embedded,web_embedded',
+];
 export type PhaseProgressFn = (phase: 'download' | 'convert', percent: number) => void;
 
 // ── Error parser ────────────────────────────────────────────────────────────
@@ -107,7 +112,11 @@ function spawnFfmpeg(
 // ── Video info ───────────────────────────────────────────────────────────────
 
 async function getVideoInfo(url: string): Promise<VideoInfo> {
-  const stdout = await spawnYtDlp(['--dump-json', '--no-playlist', '--no-warnings', url]);
+  const stdout = await spawnYtDlp([
+    '--dump-json', '--no-playlist', '--no-warnings',
+    ...YTDLP_BASE_ARGS,
+    url,
+  ]);
   const info = JSON.parse(stdout) as {
     id: string;
     title: string;
@@ -139,6 +148,7 @@ async function downloadNativeAudio(
     '-o', path.join(tempDir, '%(id)s.%(ext)s'),
     '--no-playlist',
     '--no-warnings',
+    ...YTDLP_BASE_ARGS,
     url,
   ], onProgress);
 
