@@ -8,8 +8,11 @@ services:
       - .env
     volumes:
       - kiwi-temp:/app/temp
+      # cookies.txt faylı varsa avtomatik mount olunur
+      - ./cookies.txt:/app/cookies.txt:ro
     environment:
       - NODE_ENV=production
+      - COOKIES_FILE=/app/cookies.txt
 
 volumes:
   kiwi-temp:

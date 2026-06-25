@@ -11,8 +11,10 @@ if (!botToken) {
 const config = {
   botToken,
   tempDir: path.join(process.cwd(), 'temp'),
-  maxFileSizeBytes: 45 * 1024 * 1024, // 45 MB — Telegram 50 MB limitindən aşağı
+  maxFileSizeBytes: 45 * 1024 * 1024,
   ytDlpPath: process.env.YTDLP_PATH ?? 'yt-dlp',
+  // YouTube cookies faylının yolu (serverdə age-restricted videoları üçün tələb olunur)
+  cookiesFile: process.env.COOKIES_FILE ?? '',
 } as const;
 
 export default config;

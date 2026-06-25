@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
+import { statSync } from 'fs';
 import crypto from 'crypto';
 import config from '../config';
 import { DownloadError, DownloadErrorType, DownloadResult, VideoInfo } from '../types';
@@ -10,12 +11,39 @@ import logger from '../utils/logger';
 // ── Types ───────────────────────────────────────────────────────────────────
 
 type ProgressFn = (percent: number) => void;
-
-// tv_embedded/web_embedded clientləri age-check enforce etmir
-const YTDLP_BASE_ARGS = [
-  '--extractor-args', 'youtube:player_client=tv_embedded,web_embedded',
-];
 export type PhaseProgressFn = (phase: 'download' | 'convert', percent: number) => void;
+
+// ── yt-dlp base args ─────────────────────────────────────────────────────────
+//
+// Klient prioritetləri (yt-dlp 2024.10+ default: ios,mweb):
+//   ios          — PO Token tələb etmir, çox videoda işləyir
+//   tv_embedded  — age-check bypass, cookies olmadan da çalışır
+//   mweb         — mobile web, yedək
+//   web_embedded — son çarə
+//
+// Cookies faylı varsa əlavə edilir — age-restricted + server IP problemlərini həll edir.
+
+function buildBaseArgs(): string[] {
+  const args = [
+    '--extractor-args',
+    'youtube:player_client=ios,tv_embedded,mweb,web_embedded',
+  ];
+
+  const cf = config.cookiesFile;
+  if (cf) {
+    try {
+      const stat = statSync(cf);
+      if (stat.isFile() && stat.size > 0) {
+        args.push('--cookies', cf);
+        logger.debug(`Cookies faylı istifadə edilir: ${cf}`);
+      }
+    } catch {
+      // Fayl yoxdur və ya directory-dir — cookies olmadan davam edirik
+    }
+  }
+
+  return args;
+}
 
 // ── Error parser ────────────────────────────────────────────────────────────
 
@@ -114,7 +142,7 @@ function spawnFfmpeg(
 async function getVideoInfo(url: string): Promise<VideoInfo> {
   const stdout = await spawnYtDlp([
     '--dump-json', '--no-playlist', '--no-warnings',
-    ...YTDLP_BASE_ARGS,
+    ...buildBaseArgs(),
     url,
   ]);
   const info = JSON.parse(stdout) as {
@@ -148,7 +176,7 @@ async function downloadNativeAudio(
     '-o', path.join(tempDir, '%(id)s.%(ext)s'),
     '--no-playlist',
     '--no-warnings',
-    ...YTDLP_BASE_ARGS,
+    ...buildBaseArgs(),
     url,
   ], onProgress);
 
