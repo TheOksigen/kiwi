@@ -1,7 +1,7 @@
-import { ensureDir } from './utils/file';
-import { createBot } from './bot';
-import config from './config';
-import logger from './utils/logger';
+import { ensureDir } from './utils/file.js';
+import { createBot } from './bot/index.js';
+import config from './config/index.js';
+import logger from './utils/logger.js';
 
 async function main(): Promise<void> {
   await ensureDir(config.tempDir);

@@ -1,8 +1,8 @@
 import { Bot } from 'grammy';
-import config from '../config';
-import { handleStart } from './handlers/start';
-import { handleMessage } from './handlers/message';
-import logger from '../utils/logger';
+import config from '../config/index.js';
+import { handleStart } from './handlers/start.js';
+import { handleMessage } from './handlers/message.js';
+import logger from '../utils/logger.js';
 
 export function createBot(): Bot {
   const bot = new Bot(config.botToken);

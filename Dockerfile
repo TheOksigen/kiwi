@@ -14,11 +14,8 @@ RUN npm run build
 # ── Stage 2: Production ──────────────────────────────────────────────────────
 FROM node:20-alpine AS production
 
-# Install ffmpeg and download yt-dlp binary
-RUN apk add --no-cache ffmpeg curl python3 && \
-    curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
-         -o /usr/local/bin/yt-dlp && \
-    chmod a+rx /usr/local/bin/yt-dlp
+# ffmpeg — webm→m4a konvertasiyası üçün lazımdır
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 

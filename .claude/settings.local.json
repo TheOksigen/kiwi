@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(grep -rA 10 \"interface DownloadOptions\" /Users/oksigen/Desktop/kiwi_downloader/node_modules/youtubei.js/dist/src/types/)"
     ]
   }
 }

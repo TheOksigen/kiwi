@@ -23,29 +23,7 @@ cp .env.example .env
 
 # 3. BOT_TOKEN dəyərini daxil et
 # .env faylını redaktor ilə aç və BOT_TOKEN= xəttinə tokenini əlavə et
-
-# 4. Boş cookies faylı yarat (həmişə lazımdır)
-touch cookies.txt
 ```
-
----
-
-## YouTube Cookies (Tövsiyə olunur)
-
-**Niyə lazımdır?** YouTube server/VPS IP-lərindən gələn sorğular üçün bot-detection tətbiq edir.
-Cookies olmadan **bəzi videolar** (xüsusilə age-restricted) serverdən yüklənməyə bilər.
-
-### Cookies necə əldə edilir?
-
-1. Chrome/Firefox-da **"Get cookies.txt LOCALLY"** extension-ını quraşdır
-2. **Yeni incognito pəncərə** aç (çox vacibdir!)
-3. Həmin pəncərədə YouTube-a daxil ol
-4. `https://www.youtube.com/robots.txt` ünvanına get (eyni pəncərədə)
-5. Extension vasitəsilə `youtube.com` cookies-lərini export et
-6. Faylı layihənin kök qovluğuna `cookies.txt` adı ilə saxla
-7. İncognito pəncərəni **dərhal bağla**
-
-> **Qeyd:** Cookies 2-4 həftə ərzində etibarlıdır. Xəta başladıqda yeniləmək lazımdır.
 
 ---
 
@@ -65,12 +43,6 @@ Dayandırmaq üçün:
 
 ```bash
 docker compose down
-```
-
-Cookies yeniləndikdə botu restart et:
-
-```bash
-docker compose restart
 ```
 
 ---
@@ -94,13 +66,13 @@ docker compose restart
 
 ## Texniki Stack
 
-| Komponent | Versiya |
-|-----------|---------|
-| Node.js   | 20 (Alpine) |
-| TypeScript | 5.x |
-| grammY | 1.x |
-| yt-dlp | latest |
-| FFmpeg | latest (Alpine) |
+| Komponent      | Versiya       |
+|----------------|---------------|
+| Node.js        | 20 (Alpine)   |
+| TypeScript     | 5.x (ESM)     |
+| grammY         | 1.x           |
+| youtubei.js    | 17.x          |
+| FFmpeg         | latest (Alpine) |
 
 ---
 
@@ -111,7 +83,7 @@ src/
 ├── config/       — mühit dəyişənləri
 ├── types/        — TypeScript tipləri və xəta sinifləri
 ├── utils/        — köməkçi funksiyalar (logger, fayl, youtube)
-├── services/     — yt-dlp ilə yükləmə məntiqi
+├── services/     — youtubei.js ilə yükləmə məntiqi
 ├── bot/
 │   ├── handlers/ — /start və mesaj handler-ları
 │   └── index.ts  — bot yaradılması

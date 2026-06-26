@@ -1,102 +1,63 @@
+import { Innertube } from 'youtubei.js';
+import { Readable, Transform } from 'stream';
+import { pipeline } from 'stream/promises';
+import { createWriteStream } from 'fs';
 import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs/promises';
-import { statSync } from 'fs';
 import crypto from 'crypto';
-import config from '../config';
-import { DownloadError, DownloadErrorType, DownloadResult, VideoInfo } from '../types';
-import { ensureDir, findFileByPrefix, getFileSize } from '../utils/file';
-import logger from '../utils/logger';
+import config from '../config/index.js';
+import { DownloadError, DownloadErrorType, DownloadResult } from '../types/index.js';
+import { ensureDir, getFileSize } from '../utils/file.js';
+import logger from '../utils/logger.js';
 
-// ── Types ───────────────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type ProgressFn = (percent: number) => void;
 export type PhaseProgressFn = (phase: 'download' | 'convert', percent: number) => void;
 
-// ── yt-dlp base args ─────────────────────────────────────────────────────────
-//
-// Klient prioritetləri (yt-dlp 2024.10+ default: ios,mweb):
-//   ios          — PO Token tələb etmir, çox videoda işləyir
-//   tv_embedded  — age-check bypass, cookies olmadan da çalışır
-//   mweb         — mobile web, yedək
-//   web_embedded — son çarə
-//
-// Cookies faylı varsa əlavə edilir — age-restricted + server IP problemlərini həll edir.
+// ── Innertube singleton ──────────────────────────────────────────────────────
+// Session 55 dəqiqədən bir yenilənir.
 
-function buildBaseArgs(): string[] {
-  const args = [
-    '--extractor-args',
-    'youtube:player_client=ios,tv_embedded,mweb,web_embedded',
-  ];
+let _yt: Innertube | null = null;
+let _ytTime = 0;
+const SESSION_TTL_MS = 55 * 60 * 1000;
 
-  const cf = config.cookiesFile;
-  if (cf) {
-    try {
-      const stat = statSync(cf);
-      if (stat.isFile() && stat.size > 0) {
-        args.push('--cookies', cf);
-        logger.debug(`Cookies faylı istifadə edilir: ${cf}`);
-      }
-    } catch {
-      // Fayl yoxdur və ya directory-dir — cookies olmadan davam edirik
-    }
+async function getYt(): Promise<Innertube> {
+  if (!_yt || Date.now() - _ytTime > SESSION_TTL_MS) {
+    logger.info('Innertube session yaradılır...');
+    _yt = await Innertube.create();
+    _ytTime = Date.now();
   }
-
-  return args;
+  return _yt;
 }
 
-// ── Error parser ────────────────────────────────────────────────────────────
+// ── Video ID çıxarma ─────────────────────────────────────────────────────────
 
-function parseYtDlpError(stderr: string): DownloadError {
-  const s = stderr.toLowerCase();
-  if (s.includes('video unavailable') || s.includes('this video does not exist'))
-    return new DownloadError(DownloadErrorType.VIDEO_NOT_FOUND);
-  if (s.includes('private video') || s.includes('this video is private'))
+function extractVideoId(url: string): string {
+  const m = url.match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/);
+  if (!m) throw new DownloadError(DownloadErrorType.VIDEO_NOT_FOUND, 'Video ID tapılmadı');
+  return m[1];
+}
+
+// ── Xəta parser ──────────────────────────────────────────────────────────────
+
+function parseError(err: unknown): DownloadError {
+  const msg = String(err instanceof Error ? err.message : err).toLowerCase();
+  if (msg.includes('private') || msg.includes('login_required'))
     return new DownloadError(DownloadErrorType.PRIVATE_VIDEO);
-  if (s.includes('age') || s.includes('sign in to confirm') || s.includes('age-restricted'))
+  if (msg.includes('age') || msg.includes('inappropriate'))
     return new DownloadError(DownloadErrorType.AGE_RESTRICTED);
-  if (s.includes('not available in your country') || s.includes('blocked it in your country'))
+  if (msg.includes('unavailable') || msg.includes('not found') || msg.includes('removed'))
+    return new DownloadError(DownloadErrorType.VIDEO_NOT_FOUND);
+  if (msg.includes('country') || msg.includes('region') || msg.includes('geo'))
     return new DownloadError(DownloadErrorType.GEO_RESTRICTED);
-  if (s.includes('429') || s.includes('too many requests'))
+  if (msg.includes('429') || msg.includes('quota') || msg.includes('rate'))
     return new DownloadError(DownloadErrorType.RATE_LIMITED);
-  return new DownloadError(DownloadErrorType.UNKNOWN, stderr.slice(0, 300));
+  return new DownloadError(DownloadErrorType.UNKNOWN, String(err).slice(0, 200));
 }
 
-// ── yt-dlp spawn ─────────────────────────────────────────────────────────────
-// Progress is reported on stderr: "[download]  47.5% of ..."
-
-function spawnYtDlp(args: string[], onProgress?: ProgressFn): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(config.ytDlpPath, args);
-    let stdout = '';
-    let stderrBuf = '';
-
-    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
-
-    proc.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderrBuf += text;
-      if (onProgress) {
-        const m = text.match(/\[download\]\s+(\d+\.?\d*)%/);
-        if (m) onProgress(parseFloat(m[1]));
-      }
-    });
-
-    proc.on('error', (err: NodeJS.ErrnoException) => {
-      reject(err.code === 'ENOENT'
-        ? new DownloadError(DownloadErrorType.UNKNOWN, 'yt-dlp tapılmadı')
-        : new DownloadError(DownloadErrorType.UNKNOWN, err.message));
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0) resolve(stdout);
-      else reject(parseYtDlpError(stderrBuf));
-    });
-  });
-}
-
-// ── ffmpeg spawn ──────────────────────────────────────────────────────────────
-// Progress via "-progress pipe:1" → stdout lines: "out_time_us=12345678"
+// ── ffmpeg ────────────────────────────────────────────────────────────────────
 
 function spawnFfmpeg(
   args: string[],
@@ -112,10 +73,7 @@ function spawnFfmpeg(
     proc.stdout.on('data', (chunk: Buffer) => {
       if (useProgress && duration && onProgress) {
         const m = chunk.toString().match(/out_time_us=(\d+)/);
-        if (m) {
-          const pct = Math.min(99, (parseInt(m[1]) / (duration * 1_000_000)) * 100);
-          onProgress(pct);
-        }
+        if (m) onProgress(Math.min(99, (parseInt(m[1]) / (duration * 1_000_000)) * 100));
       }
     });
 
@@ -128,7 +86,7 @@ function spawnFfmpeg(
     });
 
     proc.on('close', (code) => {
-      if (code === 0) resolve();
+      if (code === 0) { onProgress?.(100); resolve(); }
       else reject(new DownloadError(
         DownloadErrorType.FFMPEG_NOT_FOUND,
         stderrBuf.includes('No such file') ? 'ffmpeg tapılmadı' : stderrBuf.slice(-200),
@@ -137,56 +95,6 @@ function spawnFfmpeg(
   });
 }
 
-// ── Video info ───────────────────────────────────────────────────────────────
-
-async function getVideoInfo(url: string): Promise<VideoInfo> {
-  const stdout = await spawnYtDlp([
-    '--dump-json', '--no-playlist', '--no-warnings',
-    ...buildBaseArgs(),
-    url,
-  ]);
-  const info = JSON.parse(stdout) as {
-    id: string;
-    title: string;
-    duration?: number;
-    artist?: string;
-    creator?: string;
-    uploader?: string;
-  };
-  return {
-    id: info.id,
-    title: info.title,
-    duration: Math.round(info.duration ?? 0),
-    performer: info.artist ?? info.creator ?? info.uploader,
-  };
-}
-
-// ── Native audio download (no ffmpeg) ────────────────────────────────────────
-// Docs format: "ba[acodec^=aac]/ba[acodec^=mp4a.40.]/ba/b"
-// Prioritises native AAC/M4A (YouTube format 140) before any audio stream.
-
-async function downloadNativeAudio(
-  url: string,
-  videoId: string,
-  tempDir: string,
-  onProgress?: ProgressFn,
-): Promise<string> {
-  await spawnYtDlp([
-    '-f', 'ba[acodec^=aac]/ba[acodec^=mp4a.40.]/ba/b',
-    '-o', path.join(tempDir, '%(id)s.%(ext)s'),
-    '--no-playlist',
-    '--no-warnings',
-    ...buildBaseArgs(),
-    url,
-  ], onProgress);
-
-  const filePath = await findFileByPrefix(tempDir, videoId);
-  if (!filePath) throw new DownloadError(DownloadErrorType.UNKNOWN, 'Yüklənmiş fayl tapılmadı');
-  return filePath;
-}
-
-// ── ffmpeg conversion ─────────────────────────────────────────────────────────
-
 async function convertWithFfmpeg(
   inputPath: string,
   outputFormat: 'm4a' | 'mp3',
@@ -194,76 +102,104 @@ async function convertWithFfmpeg(
   duration: number,
   onProgress?: ProgressFn,
 ): Promise<string> {
-  const videoId = path.basename(inputPath, path.extname(inputPath));
-  const outputPath = path.join(tempDir, `${videoId}.${outputFormat}`);
-
-  await spawnFfmpeg(
-    ['-i', inputPath, '-vn', '-y', outputPath],
-    duration,
-    onProgress,
-  );
-
+  const id = path.basename(inputPath, path.extname(inputPath));
+  const outputPath = path.join(tempDir, `${id}.${outputFormat}`);
+  await spawnFfmpeg(['-i', inputPath, '-vn', '-y', outputPath], duration, onProgress);
   await fs.unlink(inputPath).catch(() => {});
   return outputPath;
 }
 
-// ── Main export ───────────────────────────────────────────────────────────────
+// ── Əsas export ───────────────────────────────────────────────────────────────
 
 export async function download(url: string, onProgress?: PhaseProgressFn): Promise<DownloadResult> {
+  const videoId = extractVideoId(url);
   const downloadId = crypto.randomUUID();
   const tempDir = path.join(config.tempDir, downloadId);
   await ensureDir(tempDir);
 
   logger.info(`Yükləmə başladı: ${url} [id=${downloadId}]`);
 
-  const videoInfo = await getVideoInfo(url);
-  logger.info(`Video məlumatları alındı: "${videoInfo.title}" [${videoInfo.id}]`);
+  const yt = await getYt();
 
-  const nativePath = await downloadNativeAudio(
-    url, videoInfo.id, tempDir,
-    onProgress ? (p) => onProgress('download', p) : undefined,
-  );
+  // Video məlumatları — IOS client age restriction-ı bypass edir
+  const info = await yt.getBasicInfo(videoId, { client: 'IOS' }).catch((err: unknown) => {
+    logger.error('getBasicInfo xətası:', err);
+    throw parseError(err);
+  });
 
-  const nativeExt = path.extname(nativePath).slice(1).toLowerCase();
-  logger.info(`Native audio yükləndi: .${nativeExt}`);
+  const title = info.basic_info.title ?? 'Unknown';
+  const duration = Math.round(info.basic_info.duration ?? 0);
+  const performer = info.basic_info.author ?? undefined;
+  logger.info(`Video: "${title}" [${videoId}], ${duration}s`);
 
+  // mp4 (AAC/M4A) birbaşa yüklə, yoxdur → istənilən format (webm) → ffmpeg ilə çevir
+  let nativeExt: 'm4a' | 'webm';
+  let downloadStream: ReadableStream<Uint8Array>;
+
+  try {
+    downloadStream = await info.download({
+      type: 'audio',
+      quality: 'best',
+      client: 'IOS',
+      format: 'mp4',
+    });
+    nativeExt = 'm4a';
+    logger.debug('mp4/AAC audio stream alındı');
+  } catch {
+    logger.debug('mp4 format yoxdur, istənilən audio formatı istifadə edilir');
+    downloadStream = await info.download({
+      type: 'audio',
+      quality: 'best',
+      client: 'IOS',
+    }).catch((err: unknown) => { throw parseError(err); });
+    nativeExt = 'webm';
+  }
+
+  // Yükləmə irəliləyiş trackeri
+  const nativePath = path.join(tempDir, `${videoId}.${nativeExt}`);
+  let downloadedBytes = 0;
+
+  const tracker = new Transform({
+    transform(chunk, _encoding, cb) {
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      downloadedBytes += buf.length;
+      // content_length-siz — faiz bilinmir, spinner animasiyası göstərilir
+      cb(null, buf);
+    },
+  });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await pipeline(Readable.fromWeb(downloadStream as any), tracker, createWriteStream(nativePath));
+  onProgress?.('download', 100);
+  logger.info(`Audio yükləndi: .${nativeExt} (${downloadedBytes} byte)`);
+
+  // Konvertasiya (lazım gələrsə)
   let filePath: string;
   let isFallback = false;
 
   if (nativeExt === 'm4a') {
     filePath = nativePath;
   } else {
-    logger.info(`Native format .${nativeExt}, M4A-ya çevrilir...`);
+    logger.info('M4A-ya çevrilir...');
     try {
       filePath = await convertWithFfmpeg(
-        nativePath, 'm4a', tempDir, videoInfo.duration,
+        nativePath, 'm4a', tempDir, duration,
         onProgress ? (p) => onProgress('convert', p) : undefined,
       );
       logger.info('M4A çevrilməsi uğurlu');
     } catch (m4aErr) {
-      logger.warn('M4A çevrilməsi uğursuz, MP3 cəhdi:', m4aErr);
-      try {
-        filePath = await convertWithFfmpeg(
-          nativePath, 'mp3', tempDir, videoInfo.duration,
-          onProgress ? (p) => onProgress('convert', p) : undefined,
-        );
-        isFallback = true;
-        logger.info('MP3 çevrilməsi uğurlu');
-      } catch (mp3Err) {
-        throw mp3Err instanceof DownloadError ? mp3Err : new DownloadError(DownloadErrorType.UNKNOWN);
-      }
+      logger.warn('M4A uğursuz, MP3 cəhdi:', m4aErr);
+      filePath = await convertWithFfmpeg(
+        nativePath, 'mp3', tempDir, duration,
+        onProgress ? (p) => onProgress('convert', p) : undefined,
+      );
+      isFallback = true;
+      logger.info('MP3 çevrilməsi uğurlu');
     }
   }
 
   const fileSize = await getFileSize(filePath);
   if (fileSize > config.maxFileSizeBytes) throw new DownloadError(DownloadErrorType.FILE_TOO_LARGE);
 
-  return {
-    filePath,
-    title: videoInfo.title,
-    duration: videoInfo.duration,
-    performer: videoInfo.performer,
-    tempDir,
-    isFallback,
-  };
+  return { filePath, title, duration, performer, tempDir, isFallback };
 }
