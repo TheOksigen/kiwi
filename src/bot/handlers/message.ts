@@ -1,11 +1,11 @@
 import { Context, InputFile } from 'grammy';
 import path from 'path';
-import { download } from '../../services/downloader.js';
-import { DownloadError, DownloadErrorType } from '../../types/index.js';
-import { removeDir } from '../../utils/file.js';
-import { isValidYouTubeUrl } from '../../utils/youtube.js';
-import { AnimatedStatus } from '../../utils/spinner.js';
-import logger from '../../utils/logger.js';
+import { download } from '../../services/downloader';
+import { DownloadError, DownloadErrorType } from '../../types';
+import { removeDir } from '../../utils/file';
+import { isValidYouTubeUrl } from '../../utils/youtube';
+import { AnimatedStatus } from '../../utils/spinner';
+import logger from '../../utils/logger';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -25,7 +25,7 @@ function getUserErrorMessage(error: unknown): string {
       case DownloadErrorType.RATE_LIMITED:
         return '⏳ YouTube müvəqqəti olaraq bu sorğunu blokladı. Bir az sonra yenidən cəhd edin.';
       case DownloadErrorType.FILE_TOO_LARGE:
-        return '📦 Bu videonun audio faylı çox böyükdür (45 MB limiti). Təəssüf ki, göndərmək mümkün deyil.';
+        return '📦 Bu videonun audio faylı çox böyükdür (50 MB limiti). Təəssüf ki, göndərmək mümkün deyil.';
       case DownloadErrorType.FFMPEG_NOT_FOUND:
         return '⚙️ Bu audio formatı üçün FFmpeg tələb olunur, lakin quraşdırılmayıb. Docker ilə işlətdiyinizdə bu problem olmayacaq.';
       default:
@@ -84,6 +84,7 @@ export async function handleMessage(ctx: Context): Promise<void> {
       parse_mode: 'HTML',
     });
 
+    // Spinner və istifadəçinin link mesajını sil
     await Promise.allSettled([
       spinner.delete(),
       ctx.api.deleteMessage(chatId, userMsgId),

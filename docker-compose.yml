@@ -1,12 +1,15 @@
 services:
   kiwi-bot:
-    build: https://github.com/TheOksigen/kiwi.git
+    build:
+      context: .
+      dockerfile: Dockerfile
     restart: unless-stopped
-    environment:
-      - BOT_TOKEN=BURAYA_BOT_TOKEN_YAZ
-      - YOUTUBE_COOKIE=BURAYA_COOKIE_YAZ
+    env_file:
+      - .env
     volumes:
       - kiwi-temp:/app/temp
+    environment:
+      - NODE_ENV=production
 
 volumes:
   kiwi-temp:

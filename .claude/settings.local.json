@@ -1,13 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run *)",
-      "Bash(grep -rA 10 \"interface DownloadOptions\" /Users/oksigen/Desktop/kiwi_downloader/node_modules/youtubei.js/dist/src/types/)",
-      "Bash(chmod +x /Users/oksigen/Desktop/kiwi_downloader/setup.sh)",
-      "Bash(python3 *)",
-      "Bash(docker compose *)",
-      "Bash(node *)",
-      "Bash(git -C /Users/oksigen/Desktop/kiwi_downloader remote get-url origin)"
+      "Bash(npm run *)"
     ]
   }
 }

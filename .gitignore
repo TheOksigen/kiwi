@@ -4,4 +4,3 @@ dist/
 temp/
 *.log
 .DS_Store
-cookies.txt

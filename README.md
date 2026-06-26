@@ -66,13 +66,13 @@ docker compose down
 
 ## Texniki Stack
 
-| Komponent      | Versiya       |
-|----------------|---------------|
-| Node.js        | 20 (Alpine)   |
-| TypeScript     | 5.x (ESM)     |
-| grammY         | 1.x           |
-| youtubei.js    | 17.x          |
-| FFmpeg         | latest (Alpine) |
+| Komponent | Versiya |
+|-----------|---------|
+| Node.js   | 20 (Alpine) |
+| TypeScript | 5.x |
+| grammY | 1.x |
+| yt-dlp | latest |
+| FFmpeg | latest (Alpine) |
 
 ---
 
@@ -83,7 +83,7 @@ src/
 ├── config/       — mühit dəyişənləri
 ├── types/        — TypeScript tipləri və xəta sinifləri
 ├── utils/        — köməkçi funksiyalar (logger, fayl, youtube)
-├── services/     — youtubei.js ilə yükləmə məntiqi
+├── services/     — yt-dlp ilə yükləmə məntiqi
 ├── bot/
 │   ├── handlers/ — /start və mesaj handler-ları
 │   └── index.ts  — bot yaradılması
